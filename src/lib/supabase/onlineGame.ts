@@ -1,77 +1,147 @@
 // src/lib/supabase/onlineGame.ts
+// Online multiplayer service — Supabase anon auth + Postgres + Realtime.
+// State model: each player writes ONLY their own columns; player1 (host) also
+// drives phase transitions and per-round initialisation (see useOnlineMatch).
 import { createClient } from './client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import type { Joker, PlayingCard } from '@/lib/game/types';
+import type { Joker, PlayingCard, ScoreBreakdown } from '@/lib/game/types';
+
+export type OnlinePhase =
+  | 'character'
+  | 'shop'
+  | 'play'
+  | 'showdown'
+  | 'match-end';
 
 export interface OnlinePlayer {
   id: string;
   username: string;
   characterId: string;
-  avatar?: string; // optional, undefined olabilir
+  avatar?: string;
 }
 
-export interface OnlineMatch {
+export interface OnlineMatchMeta {
   id: string;
   status: 'waiting' | 'active' | 'finished';
   player1: OnlinePlayer | null;
   player2: OnlinePlayer | null;
-  winner: OnlinePlayer | null;
-  round: number;
-  phase: string;
   created_at: string;
 }
 
+/** Full live game state for a match (one match_states row). */
 export interface OnlineMatchState {
   matchId: string;
+  phase: OnlinePhase;
+  round: number;
+
+  player1Character: string | null;
+  player2Character: string | null;
+  player1Ready: boolean;
+  player2Ready: boolean;
+  player1Played: boolean;
+  player2Played: boolean;
+
   player1Chips: number;
   player2Chips: number;
   player1Gold: number;
   player2Gold: number;
-  player1Hand: any[];
-  player2Hand: any[];
+
+  player1Jokers: Joker[];
+  player2Jokers: Joker[];
+  player1Shop: Joker[];
+  player2Shop: Joker[];
+
+  player1Hand: PlayingCard[];
+  player2Hand: PlayingCard[];
+  player1Deck: PlayingCard[];
+  player2Deck: PlayingCard[];
   player1Selected: string[];
   player2Selected: string[];
-  player1Jokers: any[];
-  player2Jokers: any[];
+
   player1DiscardsLeft: number;
   player2DiscardsLeft: number;
+
+  player1PlayedCards: PlayingCard[];
+  player2PlayedCards: PlayingCard[];
+  player1Breakdown: ScoreBreakdown | null;
+  player2Breakdown: ScoreBreakdown | null;
+
   pot: number;
-  currentTurn: string | null;
-  lastAction: any;
+  matchWinner: 'player1' | 'player2' | 'tie' | null;
+  updatedAt: string;
+}
+
+// Map a snake_case DB row to the camelCase OnlineMatchState.
+function mapRow(r: any): OnlineMatchState {
+  return {
+    matchId: r.match_id,
+    phase: (r.phase ?? 'character') as OnlinePhase,
+    round: r.round ?? 1,
+    player1Character: r.player1_character ?? null,
+    player2Character: r.player2_character ?? null,
+    player1Ready: !!r.player1_ready,
+    player2Ready: !!r.player2_ready,
+    player1Played: !!r.player1_played,
+    player2Played: !!r.player2_played,
+    player1Chips: r.player1_chips ?? 0,
+    player2Chips: r.player2_chips ?? 0,
+    player1Gold: r.player1_gold ?? 0,
+    player2Gold: r.player2_gold ?? 0,
+    player1Jokers: r.player1_jokers ?? [],
+    player2Jokers: r.player2_jokers ?? [],
+    player1Shop: r.player1_shop ?? [],
+    player2Shop: r.player2_shop ?? [],
+    player1Hand: r.player1_hand ?? [],
+    player2Hand: r.player2_hand ?? [],
+    player1Deck: r.player1_deck ?? [],
+    player2Deck: r.player2_deck ?? [],
+    player1Selected: r.player1_selected ?? [],
+    player2Selected: r.player2_selected ?? [],
+    player1DiscardsLeft: r.player1_discards_left ?? 3,
+    player2DiscardsLeft: r.player2_discards_left ?? 3,
+    player1PlayedCards: r.player1_played_cards ?? [],
+    player2PlayedCards: r.player2_played_cards ?? [],
+    player1Breakdown: r.player1_breakdown ?? null,
+    player2Breakdown: r.player2_breakdown ?? null,
+    pot: r.pot ?? 0,
+    matchWinner: (r.match_winner ?? null) as OnlineMatchState['matchWinner'],
+    updatedAt: r.updated_at ?? new Date(0).toISOString(),
+  };
 }
 
 class OnlineGameService {
   private supabase = createClient();
   private channels: Map<string, RealtimeChannel> = new Map();
 
-  // Auth - Anonim giriş
+  // --- Auth ------------------------------------------------------------------
   async signInAnonymously() {
     const { data, error } = await this.supabase.auth.signInAnonymously();
     if (error) throw error;
     return data;
   }
 
-  // Auth - Mevcut kullanıcıyı al
   async getCurrentUser() {
     const { data: { user }, error } = await this.supabase.auth.getUser();
     if (error) throw error;
     return user;
   }
 
-  // Oyuncu oluştur/güncelle
-  async createOrUpdatePlayer(username: string, characterId: string = 'gambler', avatar?: string) {
+  async createOrUpdatePlayer(username: string, characterId = 'gambler', avatar?: string) {
     const user = await this.getCurrentUser();
     if (!user) throw new Error('Oturum açılmamış');
 
     const { data, error } = await this.supabase
       .from('players')
-      .upsert({
-        user_id: user.id,
-        username,
-        character_id: characterId,
-        avatar: avatar || null,
-        updated_at: new Date().toISOString()
-      })
+      .upsert(
+        {
+          user_id: user.id,
+          username,
+          character_id: characterId,
+          avatar: avatar ?? null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      )
       .select()
       .single();
 
@@ -79,15 +149,12 @@ class OnlineGameService {
     return data;
   }
 
-  // Oyuncu bilgisini getir
   async getPlayer(userId?: string) {
     let uid = userId;
-    
     if (!uid) {
       const user = await this.getCurrentUser();
       uid = user?.id;
     }
-    
     if (!uid) return null;
 
     const { data, error } = await this.supabase
@@ -100,52 +167,44 @@ class OnlineGameService {
     return data;
   }
 
-  // Yeni maç oluştur
+  // --- Matches ---------------------------------------------------------------
   async createMatch(playerId: string): Promise<string> {
-    const { data, error } = await this.supabase
+    // 1) match row (player1 = creator, waiting for opponent)
+    const { data: match, error: mErr } = await this.supabase
       .from('matches')
       .insert({
         player1_id: playerId,
         status: 'waiting',
-        phase: 'lobby'
+        phase: 'character',
       })
       .select('id')
       .single();
+    if (mErr) throw mErr;
 
-    if (error) throw error;
-    
-    // Match state oluştur
-    await this.supabase
-      .from('match_states')
-      .insert({
-        match_id: data.id,
-        player1_chips: 100,
-        player1_gold: 10,
-        player2_chips: 100,
-        player2_gold: 10,
-        player1_discards_left: 3,
-        player2_discards_left: 3
-      });
+    // 2) live game-state row, starts in the character phase
+    const { error: sErr } = await this.supabase.from('match_states').insert({
+      match_id: match.id,
+      phase: 'character',
+      round: 1,
+    });
+    if (sErr) throw sErr;
 
-    return data.id;
+    return match.id;
   }
 
-  // Maça katıl
   async joinMatch(matchId: string, playerId: string) {
     const { error } = await this.supabase
       .from('matches')
       .update({
         player2_id: playerId,
         status: 'active',
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('id', matchId)
       .eq('status', 'waiting');
-
     if (error) throw error;
   }
 
-  // Rastgele maç bul
   async findRandomMatch(): Promise<string | null> {
     const { data, error } = await this.supabase
       .from('matches')
@@ -153,151 +212,165 @@ class OnlineGameService {
       .eq('status', 'waiting')
       .limit(1)
       .single();
-
     if (error) return null;
-    return data?.id || null;
+    return data?.id ?? null;
   }
 
-  // Aktif maçları getir
-  async getActiveMatches(): Promise<OnlineMatch[]> {
+  async getMatchMeta(matchId: string): Promise<OnlineMatchMeta | null> {
     const { data, error } = await this.supabase
       .from('matches')
-      .select(`
-        *,
+      .select(
+        `
+        id, status, created_at,
         player1:players!matches_player1_id_fkey(id, username, character_id, avatar),
-        player2:players!matches_player2_id_fkey(id, username, character_id, avatar),
-        winner:players!matches_winner_id_fkey(id, username, character_id, avatar)
-      `)
+        player2:players!matches_player2_id_fkey(id, username, character_id, avatar)
+      `
+      )
+      .eq('id', matchId)
+      .single();
+    if (error || !data) return null;
+
+    const toPlayer = (p: any): OnlinePlayer | null =>
+      p
+        ? {
+            id: p.id,
+            username: p.username,
+            characterId: p.character_id || 'gambler',
+            avatar: p.avatar || undefined,
+          }
+        : null;
+
+    return {
+      id: data.id,
+      status: data.status,
+      player1: toPlayer(data.player1),
+      player2: toPlayer(data.player2),
+      created_at: data.created_at,
+    };
+  }
+
+  async getActiveMatches(): Promise<OnlineMatchMeta[]> {
+    const { data, error } = await this.supabase
+      .from('matches')
+      .select(
+        `
+        id, status, created_at,
+        player1:players!matches_player1_id_fkey(id, username, character_id, avatar),
+        player2:players!matches_player2_id_fkey(id, username, character_id, avatar)
+      `
+      )
       .in('status', ['waiting', 'active'])
       .order('created_at', { ascending: false });
+    if (error || !data) return [];
 
-    if (error) throw error;
-    
-    // Veriyi OnlineMatch formatına dönüştür - avatar null kontrolü ile
-    return (data || []).map((item: any) => ({
-      id: item.id,
-      status: item.status,
-      player1: item.player1 ? {
-        id: item.player1.id,
-        username: item.player1.username,
-        characterId: item.player1.character_id || 'gambler',
-        avatar: item.player1.avatar || undefined
-      } : null,
-      player2: item.player2 ? {
-        id: item.player2.id,
-        username: item.player2.username,
-        characterId: item.player2.character_id || 'gambler',
-        avatar: item.player2.avatar || undefined
-      } : null,
-      winner: item.winner ? {
-        id: item.winner.id,
-        username: item.winner.username,
-        characterId: item.winner.character_id || 'gambler',
-        avatar: item.winner.avatar || undefined
-      } : null,
-      round: item.round || 1,
-      phase: item.phase || 'lobby',
-      created_at: item.created_at
+    const toPlayer = (p: any): OnlinePlayer | null =>
+      p
+        ? {
+            id: p.id,
+            username: p.username,
+            characterId: p.character_id || 'gambler',
+            avatar: p.avatar || undefined,
+          }
+        : null;
+
+    return data.map((m: any) => ({
+      id: m.id,
+      status: m.status,
+      player1: toPlayer(m.player1),
+      player2: toPlayer(m.player2),
+      created_at: m.created_at,
     }));
   }
 
-  // Maç durumunu güncelle
-  async updateMatchState(matchId: string, state: Partial<OnlineMatchState>) {
-    const updateData: any = {
-      updated_at: new Date().toISOString()
+  // --- Live game state -------------------------------------------------------
+  async getMatchState(matchId: string): Promise<OnlineMatchState | null> {
+    const { data, error } = await this.supabase
+      .from('match_states')
+      .select('*')
+      .eq('match_id', matchId)
+      .single();
+    if (error || !data) return null;
+    return mapRow(data);
+  }
+
+  /** Patch the match_states row. `updates` uses camelCase keys (mapped here). */
+  async updateMatchState(matchId: string, updates: Partial<OnlineMatchState>) {
+    const u: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+    const map: Record<keyof OnlineMatchState, string> = {
+      matchId: 'match_id',
+      phase: 'phase',
+      round: 'round',
+      player1Character: 'player1_character',
+      player2Character: 'player2_character',
+      player1Ready: 'player1_ready',
+      player2Ready: 'player2_ready',
+      player1Played: 'player1_played',
+      player2Played: 'player2_played',
+      player1Chips: 'player1_chips',
+      player2Chips: 'player2_chips',
+      player1Gold: 'player1_gold',
+      player2Gold: 'player2_gold',
+      player1Jokers: 'player1_jokers',
+      player2Jokers: 'player2_jokers',
+      player1Shop: 'player1_shop',
+      player2Shop: 'player2_shop',
+      player1Hand: 'player1_hand',
+      player2Hand: 'player2_hand',
+      player1Deck: 'player1_deck',
+      player2Deck: 'player2_deck',
+      player1Selected: 'player1_selected',
+      player2Selected: 'player2_selected',
+      player1DiscardsLeft: 'player1_discards_left',
+      player2DiscardsLeft: 'player2_discards_left',
+      player1PlayedCards: 'player1_played_cards',
+      player2PlayedCards: 'player2_played_cards',
+      player1Breakdown: 'player1_breakdown',
+      player2Breakdown: 'player2_breakdown',
+      pot: 'pot',
+      matchWinner: 'match_winner',
+      updatedAt: 'updated_at',
     };
 
-    if (state.player1Chips !== undefined) updateData.player1_chips = state.player1Chips;
-    if (state.player2Chips !== undefined) updateData.player2_chips = state.player2Chips;
-    if (state.player1Gold !== undefined) updateData.player1_gold = state.player1Gold;
-    if (state.player2Gold !== undefined) updateData.player2_gold = state.player2Gold;
-    if (state.player1Hand !== undefined) updateData.player1_hand = state.player1Hand;
-    if (state.player2Hand !== undefined) updateData.player2_hand = state.player2Hand;
-    if (state.player1Selected !== undefined) updateData.player1_selected = state.player1Selected;
-    if (state.player2Selected !== undefined) updateData.player2_selected = state.player2Selected;
-    if (state.player1Jokers !== undefined) updateData.player1_jokers = state.player1Jokers;
-    if (state.player2Jokers !== undefined) updateData.player2_jokers = state.player2Jokers;
-    if (state.player1DiscardsLeft !== undefined) updateData.player1_discards_left = state.player1DiscardsLeft;
-    if (state.player2DiscardsLeft !== undefined) updateData.player2_discards_left = state.player2DiscardsLeft;
-    if (state.pot !== undefined) updateData.pot = state.pot;
-    if (state.currentTurn !== undefined) updateData.current_turn = state.currentTurn;
-    if (state.lastAction !== undefined) updateData.last_action = state.lastAction;
+    for (const [camel, snake] of Object.entries(map)) {
+      if (camel in updates) u[snake] = (updates as Record<string, unknown>)[camel];
+    }
 
     const { error } = await this.supabase
       .from('match_states')
-      .update(updateData)
+      .update(u)
       .eq('match_id', matchId);
-
     if (error) throw error;
   }
 
-  // Maç log ekle
   async addMatchLog(matchId: string, message: string) {
     const { error } = await this.supabase
       .from('match_logs')
-      .insert({
-        match_id: matchId,
-        message
-      });
-
+      .insert({ match_id: matchId, message });
     if (error) console.error('Log eklenemedi:', error);
   }
 
-  // Maç durumunu dinle (gerçek zamanlı)
+  /** Realtime: live game state + logs. */
   subscribeToMatch(
     matchId: string,
     onStateChange: (state: OnlineMatchState) => void,
     onLog: (log: string) => void
   ) {
-    // Match state dinle
     const stateChannel = this.supabase
       .channel(`match-state:${matchId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'match_states',
-          filter: `match_id=eq.${matchId}`
-        },
-        (payload) => {
-          const newState = payload.new as any;
-          onStateChange({
-            matchId: newState.match_id,
-            player1Chips: newState.player1_chips || 0,
-            player2Chips: newState.player2_chips || 0,
-            player1Gold: newState.player1_gold || 0,
-            player2Gold: newState.player2_gold || 0,
-            player1Hand: newState.player1_hand || [],
-            player2Hand: newState.player2_hand || [],
-            player1Selected: newState.player1_selected || [],
-            player2Selected: newState.player2_selected || [],
-            player1Jokers: newState.player1_jokers || [],
-            player2Jokers: newState.player2_jokers || [],
-            player1DiscardsLeft: newState.player1_discards_left || 3,
-            player2DiscardsLeft: newState.player2_discards_left || 3,
-            pot: newState.pot || 0,
-            currentTurn: newState.current_turn,
-            lastAction: newState.last_action
-          });
-        }
+        { event: '*', schema: 'public', table: 'match_states', filter: `match_id=eq.${matchId}` },
+        (payload) => onStateChange(mapRow(payload.new))
       )
       .subscribe();
 
-    // Log dinle
     const logChannel = this.supabase
       .channel(`match-logs:${matchId}`)
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'match_logs',
-          filter: `match_id=eq.${matchId}`
-        },
-        (payload) => {
-          onLog(payload.new.message);
-        }
+        { event: 'INSERT', schema: 'public', table: 'match_logs', filter: `match_id=eq.${matchId}` },
+        (payload) => onLog((payload.new as any).message)
       )
       .subscribe();
 
@@ -312,45 +385,54 @@ class OnlineGameService {
     };
   }
 
-  // Maç listesini dinle (lobi için)
-  subscribeToMatches(onMatches: (matches: OnlineMatch[]) => void) {
+  /** Realtime: match row (join detection, status). */
+  subscribeToMatchMeta(matchId: string, onMeta: (meta: OnlineMatchMeta) => void) {
     const channel = this.supabase
-      .channel('matches')
+      .channel(`match-meta:${matchId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'matches'
-        },
+        { event: '*', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` },
+        async () => {
+          const meta = await this.getMatchMeta(matchId);
+          if (meta) onMeta(meta);
+        }
+      )
+      .subscribe();
+
+    this.channels.set(`meta:${matchId}`, channel);
+    return () => {
+      channel.unsubscribe();
+      this.channels.delete(`meta:${matchId}`);
+    };
+  }
+
+  /** Realtime: lobby list of active/waiting matches. */
+  subscribeToMatches(onMatches: (matches: OnlineMatchMeta[]) => void) {
+    const channel = this.supabase
+      .channel("matches-lobby")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "matches" },
         async () => {
           const matches = await this.getActiveMatches();
           onMatches(matches);
         }
       )
       .subscribe();
-
-    this.channels.set('matches', channel);
+    this.channels.set("matches-lobby", channel);
     return () => {
       channel.unsubscribe();
-      this.channels.delete('matches');
+      this.channels.delete("matches-lobby");
     };
   }
 
-  // Maçı sil (test için)
   async deleteMatch(matchId: string) {
-    const { error } = await this.supabase
-      .from('matches')
-      .delete()
-      .eq('id', matchId);
+    const { error } = await this.supabase.from('matches').delete().eq('id', matchId);
     if (error) throw error;
   }
 
-  // Tüm kanalları temizle
   cleanup() {
-    this.channels.forEach((channel) => {
-      channel.unsubscribe();
-    });
+    this.channels.forEach((channel) => channel.unsubscribe());
     this.channels.clear();
   }
 }

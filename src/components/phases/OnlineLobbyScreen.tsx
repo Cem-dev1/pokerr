@@ -6,13 +6,13 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { CasinoTable } from "@/components/game/CasinoTable";
 import { onlineGame } from "@/lib/supabase/onlineGame";
-import type { OnlineMatch } from "@/lib/supabase/onlineGame";
+import type { OnlineMatchMeta } from "@/lib/supabase/onlineGame";
 import { Users, Plus, RefreshCw, Gamepad2, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export function OnlineLobbyScreen() {
   const router = useRouter();
-  const [matches, setMatches] = useState<OnlineMatch[]>([]);
+  const [matches, setMatches] = useState<OnlineMatchMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [username, setUsername] = useState("");
