@@ -110,8 +110,15 @@ function mapRow(r: any): OnlineMatchState {
 }
 
 class OnlineGameService {
-  private supabase = createClient();
+  private _client: ReturnType<typeof createClient> | null = null;
   private channels: Map<string, RealtimeChannel> = new Map();
+
+  // Lazy: the Supabase client is created on first use (client-side), never at
+  // module-import/build time — so a missing env var can't crash the build.
+  private get supabase(): ReturnType<typeof createClient> {
+    if (!this._client) this._client = createClient();
+    return this._client;
+  }
 
   // --- Auth ------------------------------------------------------------------
   async signInAnonymously() {

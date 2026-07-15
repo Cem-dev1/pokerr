@@ -3,6 +3,23 @@
 Supabase anonim (guest) auth **ve** tam online multiplayer kurulu. Kod tarafı
 hazır; Supabase dashboard'ında 2 adım kaldı (koddan yapılamaz).
 
+## 0. Vercel — Environment Variables (404'ü önler)
+
+`.env.local` **Vercel'e yüklenmez**. Vercel'de env yoksa build çöker → **404**.
+Vercel → projen → **Settings → Environment Variables** → şunları ekle (tüm
+environment'ler: Production + Preview + Development):
+
+| Key | Value |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://aenmzqizydxkcqqxqlap.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_EatQm7BC62yWClYScjwQWw_jTx7zsWR` |
+
+Sonra **Deployments → en üstteki → Redeploy**. (NEXT_PUBLIC_ değişkenleri build
+anında gömüldüğü için yeniden deploy şart.)
+
+> Kod artık env eksikse bile **build'i çökertmiyor** (istemci tembel oluşturuluyor),
+> ama Supabase bağlantısı için yine de bu iki değişkeni girmelisin.
+
 ## 1. Anonim auth'ı aç (KRİTİK)
 
 1. https://supabase.com/dashboard → proje `aenmzqizydxkcqqxqlap`
