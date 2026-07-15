@@ -27,7 +27,7 @@ create table if not exists public.matches (
   winner_id   uuid references public.players(id) on delete set null,
   status      text not null default 'waiting',  -- waiting | active | finished
   round       int  not null default 1,
-  phase       text not null default 'character',-- mirror of match_states.phase (lobby meta)
+  phase       text not null default 'character',
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -78,37 +78,40 @@ create table if not exists public.match_states (
 );
 
 -- Bring an existing (older) match_states table up to the full column set.
-do $$
-declare c text;
-begin
-  foreach c in array array[
-    'phase','round',
-    'player1_character','player2_character',
-    'player1_ready','player2_ready',
-    'player1_played','player2_played',
-    'player1_gold','player2_gold',
-    'player1_jokers','player2_jokers',
-    'player1_shop','player2_shop',
-    'player1_deck','player2_deck',
-    'player1_selected','player2_selected',
-    'player1_discards_left','player2_discards_left',
-    'player1_played_cards','player2_played_cards',
-    'player1_breakdown','player2_breakdown',
-    'pot','match_winner'
-  ] loop
-    execute format('alter table public.match_states add column if not exists %I jsonb', c)
-      when c in ('player1_jokers','player2_jokers','player1_shop','player2_shop',
-                 'player1_hand','player2_hand','player1_deck','player2_deck',
-                 'player1_selected','player2_selected','player1_played_cards',
-                 'player2_played_cards','player1_breakdown','player2_breakdown','last_action');
-    execute format('alter table public.match_states add column if not exists %I text', c)
-      when c in ('phase','player1_character','player2_character','match_winner');
-    execute format('alter table public.match_states add column if not exists %I integer', c)
-      when c in ('round','player1_gold','player2_gold','player1_discards_left','player2_discards_left','pot');
-    execute format('alter table public.match_states add column if not exists %I boolean', c)
-      when c in ('player1_ready','player2_ready','player1_played','player2_played');
-  end loop;
-end$$;
+-- All statements are no-ops if the column already exists.
+alter table public.match_states add column if not exists phase                 text     not null default 'character';
+alter table public.match_states add column if not exists round                 integer  not null default 1;
+alter table public.match_states add column if not exists player1_character     text;
+alter table public.match_states add column if not exists player2_character     text;
+alter table public.match_states add column if not exists player1_ready         boolean  not null default false;
+alter table public.match_states add column if not exists player2_ready         boolean  not null default false;
+alter table public.match_states add column if not exists player1_played        boolean  not null default false;
+alter table public.match_states add column if not exists player2_played        boolean  not null default false;
+alter table public.match_states add column if not exists player1_chips         integer  not null default 0;
+alter table public.match_states add column if not exists player2_chips         integer  not null default 0;
+alter table public.match_states add column if not exists player1_gold          integer  not null default 0;
+alter table public.match_states add column if not exists player2_gold          integer  not null default 0;
+alter table public.match_states add column if not exists player1_jokers        jsonb    not null default '[]';
+alter table public.match_states add column if not exists player2_jokers        jsonb    not null default '[]';
+alter table public.match_states add column if not exists player1_shop          jsonb    not null default '[]';
+alter table public.match_states add column if not exists player2_shop          jsonb    not null default '[]';
+alter table public.match_states add column if not exists player1_hand          jsonb    not null default '[]';
+alter table public.match_states add column if not exists player2_hand          jsonb    not null default '[]';
+alter table public.match_states add column if not exists player1_deck          jsonb    not null default '[]';
+alter table public.match_states add column if not exists player2_deck          jsonb    not null default '[]';
+alter table public.match_states add column if not exists player1_selected      jsonb    not null default '[]';
+alter table public.match_states add column if not exists player2_selected      jsonb    not null default '[]';
+alter table public.match_states add column if not exists player1_discards_left integer  not null default 3;
+alter table public.match_states add column if not exists player2_discards_left integer  not null default 3;
+alter table public.match_states add column if not exists player1_played_cards  jsonb    not null default '[]';
+alter table public.match_states add column if not exists player2_played_cards  jsonb    not null default '[]';
+alter table public.match_states add column if not exists player1_breakdown     jsonb;
+alter table public.match_states add column if not exists player2_breakdown     jsonb;
+alter table public.match_states add column if not exists pot                   integer  not null default 0;
+alter table public.match_states add column if not exists match_winner          text;
+alter table public.match_states add column if not exists current_turn          uuid;
+alter table public.match_states add column if not exists last_action           jsonb;
+alter table public.match_states add column if not exists updated_at            timestamptz not null default now();
 
 -- ---------- match_logs ----------
 create table if not exists public.match_logs (
@@ -141,7 +144,10 @@ create policy "matches_all_anon"      on public.matches      for all to anon usi
 create policy "match_states_all_anon" on public.match_states for all to anon using (true) with check (true);
 create policy "match_logs_all_anon"   on public.match_logs   for all to anon using (true) with check (true);
 
--- Realtime: broadcast changes to subscribed clients.
-alter publication supabase_realtime add table public.matches;
-alter publication supabase_realtime add table public.match_states;
-alter publication supabase_realtime add table public.match_logs;
+-- Realtime: broadcast changes to subscribed clients (idempotent).
+do $$
+begin
+  begin alter publication supabase_realtime add table public.matches;      exception when others then null; end;
+  begin alter publication supabase_realtime add table public.match_states; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.match_logs;   exception when others then null; end;
+end $$;
