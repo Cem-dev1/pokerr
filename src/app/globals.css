@@ -1,0 +1,243 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* ============================================================= */
+/* Casino Poker Theme v2 (force-recompile) */
+/* Casino Poker Theme                                            */
+/* ============================================================= */
+
+html, body, #__next { height: 100%; }
+
+/* Dark wooden table border (outer frame, oval illusion) */
+.casino-wood {
+  background-color: #2a160a;
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 220, 150, 0.10), transparent 55%),
+    repeating-linear-gradient(
+      92deg,
+      rgba(0, 0, 0, 0.16) 0px,
+      rgba(0, 0, 0, 0.16) 2px,
+      rgba(255, 255, 255, 0.03) 2px,
+      rgba(255, 255, 255, 0.03) 6px
+    ),
+    repeating-linear-gradient(
+      178deg,
+      rgba(120, 60, 20, 0.55) 0px,
+      rgba(70, 35, 12, 0.55) 9px,
+      rgba(120, 60, 20, 0.55) 18px
+    ),
+    linear-gradient(180deg, #3a1f0e 0%, #1f0f06 100%);
+  box-shadow:
+    inset 0 0 0 4px rgba(0,0,0,0.45),
+    inset 0 0 60px rgba(0,0,0,0.6);
+}
+
+/* Vibrant green felt (inner playfield) */
+.casino-felt {
+  background-color: #0b6b3a;
+  background-image:
+    radial-gradient(80% 60% at 50% 18%, rgba(255, 255, 255, 0.18), transparent 60%),
+    radial-gradient(120% 120% at 50% 120%, rgba(0, 0, 0, 0.45), transparent 60%),
+    radial-gradient(60% 60% at 20% 80%, rgba(0, 200, 120, 0.18), transparent 60%),
+    repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.012) 0 2px, rgba(0,0,0,0.012) 2px 4px),
+    linear-gradient(160deg, #0d7a43 0%, #095f32 55%, #074a27 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(0,0,0,0.35),
+    inset 0 0 80px rgba(0,0,0,0.55),
+    inset 0 2px 30px rgba(255,255,255,0.06);
+}
+
+/* Light hüzmesi / bokeh glow accents */
+.casino-bokeh::before,
+.casino-bokeh::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  filter: blur(28px);
+  opacity: 0.5;
+}
+.casino-bokeh::before {
+  width: 240px; height: 240px;
+  top: -60px; left: 12%;
+  background: radial-gradient(circle, rgba(255,230,150,0.5), transparent 70%);
+}
+.casino-bokeh::after {
+  width: 300px; height: 300px;
+  bottom: -80px; right: 8%;
+  background: radial-gradient(circle, rgba(150,255,200,0.35), transparent 70%);
+}
+
+/* Playing card */
+.play-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f4f1e8 100%);
+  border: 1px solid rgba(0,0,0,0.18);
+  box-shadow:
+    0 6px 14px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.play-card-back {
+  background:
+    repeating-linear-gradient(45deg, #7f1d1d 0 6px, #991b1b 6px 12px),
+    linear-gradient(180deg, #b91c1c, #7f1d1d);
+  border: 2px solid #fbbf24;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(0,0,0,0.25);
+}
+
+/* Casino chip 3D */
+.casino-chip {
+  border-radius: 9999px;
+  background-clip: padding-box;
+  position: relative;
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.45),
+    inset 0 0 0 4px rgba(255,255,255,0.18),
+    inset 0 0 0 6px rgba(0,0,0,0.25);
+}
+.casino-chip::before {
+  content: "";
+  position: absolute;
+  inset: 22%;
+  border-radius: 9999px;
+  background: rgba(255,255,255,0.10);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35);
+}
+
+/* Custom scrollbar for log / lists */
+.casino-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.casino-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.25); border-radius: 8px; }
+.casino-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #fbbf24, #b45309);
+  border-radius: 8px;
+}
+
+/* Animated pot pulse */
+@keyframes potPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+.animate-pot-pulse { animation: potPulse 1.6s ease-in-out infinite; }
+
+/* Text glow for pot label */
+.text-glow-white { text-shadow: 0 1px 2px rgba(0,0,0,0.6), 0 0 14px rgba(255,255,255,0.35); }
+.text-glow-gold { text-shadow: 0 1px 2px rgba(0,0,0,0.7), 0 0 16px rgba(251,191,36,0.55); }
